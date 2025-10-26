@@ -15,8 +15,8 @@ function Register() {
 
       // ✅ Handle success properly
       if (res.status === 200 && res.data.token) {
-        localStorage.setItem("token", res.data.token);
-        navigate("/map");
+        alert("✅ Registration successful! Please log in.");
+        navigate("/");
       } else {
         alert("Registration failed, please try again.");
       }

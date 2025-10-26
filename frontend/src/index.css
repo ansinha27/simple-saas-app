@@ -31,3 +31,31 @@ button {
 button:hover {
   background-color: #0056b3;
 }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: Arial, sans-serif;
+}
+
+.leaflet-container {
+  border-radius: 8px;
+}
+
+/* Ensure draw handles sit above the map tiles */
+.leaflet-pane.leaflet-overlay-pane,
+.leaflet-draw,
+.leaflet-draw-toolbar,
+.leaflet-draw-toolbar-top,
+.leaflet-draw-actions {
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure map tiles stay behind UI controls */
+.leaflet-pane.leaflet-tile-pane {
+  z-index: 1 !important;
+}
+

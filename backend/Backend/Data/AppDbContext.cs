@@ -9,4 +9,6 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<Location> Locations { get; set; }
+
+    public DbSet<SitePolygon> SitePolygons { get; set; }
 }
