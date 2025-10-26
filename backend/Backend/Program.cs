@@ -41,7 +41,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5175")
+            policy.WithOrigins(
+                "http://localhost:5173",
+                "https://simple-saas.onrender.com"
+            )
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
