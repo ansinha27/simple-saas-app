@@ -31,3 +31,15 @@ button {
 button:hover {
   background-color: #0056b3;
 }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: Arial, sans-serif;
+}
+
+.leaflet-container {
+  border-radius: 8px;
+}
