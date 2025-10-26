@@ -6,7 +6,7 @@ import "./index.css";
 
 function App() {
   return (
-    <Router>
+    <Router basename="/">
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
