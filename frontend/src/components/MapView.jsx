@@ -1,3 +1,7 @@
+import L from "leaflet";
+import "leaflet-draw";               // ✅ JS behaviors
+import "leaflet-draw/dist/leaflet.draw.css"; // ✅ tool styling
+
 import {
   MapContainer,
   TileLayer,
@@ -16,14 +20,15 @@ import { FeatureGroup } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 
 // -------- Helpers --------
-function ClickHandler({ onClick }) {
+function ClickHandler({ onClick, isDrawing }) {
   useMapEvents({
     click(e) {
-      onClick(e.latlng);
+      if (!isDrawing) onClick(e.latlng);
     },
   });
   return null;
 }
+
 
 function FlyToLocation({ position }) {
   const map = useMap();
@@ -60,12 +65,16 @@ function MapView() {
 
   const [adding, setAdding] = useState(null); // marker draft { lat, lng }
   const [form, setForm] = useState({ name: "", description: "", category: "" });
+  const [editingLocationId, setEditingLocationId] = useState(null);
+
 
   // polygon draft UI state
   const [polyDraft, setPolyDraft] = useState(null); // GeoJSON object
   const [polyForm, setPolyForm] = useState({ name: "", description: "", category: "" });
   const [loading, setLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+
 
   const token = localStorage.getItem("token");
 
@@ -108,17 +117,32 @@ function MapView() {
     if (!adding) return;
     setLoading(true);
     try {
-      await api.post(
-        "/locations",
-        {
-          name: form.name.trim(),
-          latitude: adding.lat,
-          longitude: adding.lng,
-          description: form.description || null,
-          category: form.category || null,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      if (editingLocationId) {
+        // ✅ Update existing
+        await api.put(
+          `/locations/${editingLocationId}`,
+          {
+            name: form.name.trim(),
+            category: form.category || null,
+            description: form.description || null,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        // ✅ Create new
+        await api.post(
+          "/locations",
+          {
+            name: form.name.trim(),
+            latitude: adding.lat,
+            longitude: adding.lng,
+            description: form.description || null,
+            category: form.category || null,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
       setAdding(null);
       await fetchLocations();
       alert("📍 Location saved!");
@@ -126,6 +150,8 @@ function MapView() {
       console.error(err);
       alert("Error saving location.");
     } finally {
+      setEditingLocationId(null);
+
       setLoading(false);
     }
   };
@@ -197,7 +223,7 @@ function MapView() {
   }, [polygons]);
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#fafafa" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#fafafa" }}>
       {/* Sidebar with filter + list + logout (hover expand) */}
       <Sidebar
         locations={locations}
@@ -205,9 +231,10 @@ function MapView() {
       />
 
       {/* Main content */}
-      <div style={{ flex: 1, padding: "12px", position: "relative" }}>
+      <div style={{ flex: 1, padding: "12px", position: "relative", display: "flex", flexDirection: "column" }}>
+
         {/* Search Bar */}
-        <div style={{ marginBottom: "12px", maxWidth: "350px" }}>
+        <div style={{ marginBottom: "12px", maxWidth: "350px", zIndex: 1000 }}>
           <SearchBar onSelectLocation={(pos) => setAdding(pos)} />
         </div>
 
@@ -409,57 +436,93 @@ function MapView() {
         )}
 
         {/* MAP */}
-        <MapContainer
-          center={[51.509, -0.118]} // London-ish default; adjust to your demo area
-          zoom={12}
-          style={{ width: "100%", height: "100%", borderRadius: "12px" }}
-          zoomControl={false}
-        >
-          <ZoomControl position="bottomright" />
-          <FlyToLocation position={adding} />
-          <FlyToLocationOnSelect location={selectedLocation} />
-          <ClickHandler onClick={handleMapClick} />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <MapContainer
+            center={[51.509, -0.118]} // London-ish default; adjust to your demo area
+            zoom={12}
+            doubleClickZoom={false}
+            worldCopyJump={false}
+            maxBounds={[[-85, -180], [85, 180]]}
+            maxBoundsViscosity={1.0}
+            minZoom={3}
+            maxZoom={19}
 
-          <TileLayer
-            attribution='&copy; OpenStreetMap contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+            style={{ width: "100%", height: "100%", borderRadius: "12px", position: "relative", zIndex: 1, overflow: "hidden" }}
+            zoomControl={false}
+          >
+            <ZoomControl position="bottomright" />
+            <FlyToLocation position={adding} />
+            <FlyToLocationOnSelect location={selectedLocation} />
+            <ClickHandler onClick={handleMapClick} isDrawing={isDrawing} />
 
-          {/* Draw tools */}
-          <FeatureGroup>
-            <EditControl
-              position="topright"
-              draw={{
-                polygon: true,
-                polyline: false,
-                rectangle: false,
-                circle: false,
-                marker: false,
-                circlemarker: false,
-              }}
-              edit={{ edit: false, remove: false }}
-              onCreated={onCreated}
+            <TileLayer
+              attribution='&copy; OpenStreetMap contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              noWrap={true}
+              bounds={[[-85, -180], [85, 180]]}
             />
-          </FeatureGroup>
 
-          {/* Render saved polygons */}
-          {parsedPolygons.map((p) => (
-            <GeoJSON key={p.id} data={p.parsed} style={() => polygonStyle}>
-              {/* You could add onEachFeature to bind popups with p.name, etc. */}
-            </GeoJSON>
-          ))}
 
-          {/* Render saved markers */}
-          {locations.map((loc) => (
-            <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
-              <Popup>
-                <div style={{ fontWeight: 600, marginBottom: "4px" }}>{loc.name}</div>
-                {loc.category && <div style={{ fontSize: "13px" }}>Category: {loc.category}</div>}
-                {loc.description && <div style={{ fontSize: "13px", marginTop: "4px" }}>{loc.description}</div>}
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+            {/* Draw tools */}
+            <FeatureGroup>
+              <EditControl
+                position="topright"
+                draw={{
+                  polygon: true,
+                  polyline: false,
+                  rectangle: false,
+                  circle: false,
+                  marker: false,
+                  circlemarker: false,
+                }}
+                edit={{ edit: false, remove: false }}
+                onDrawStart={() => setIsDrawing(true)}
+                onDrawStop={() => setIsDrawing(false)}
+                onCreated={(e) => {
+                  setIsDrawing(false);
+                  onCreated(e);
+                }}
+              />
+            </FeatureGroup>
+
+            {/* Render saved polygons */}
+            {parsedPolygons.map((p) => (
+              <GeoJSON key={p.id} data={p.parsed} style={() => polygonStyle}>
+                {/* You could add onEachFeature to bind popups with p.name, etc. */}
+              </GeoJSON>
+            ))}
+
+            {/* Render saved markers */}
+            {locations.map((loc) => (
+              <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
+
+                <Popup>
+                  <div style={{ fontWeight: 600, marginBottom: "4px" }}>{loc.name}</div>
+                  {loc.category && <div style={{ fontSize: "13px" }}>Category: {loc.category}</div>}
+                  {loc.description && <div style={{ fontSize: "13px", marginTop: "4px" }}>{loc.description}</div>}
+
+                  <button
+                    style={{ marginTop: "8px", width: "100%", padding: "6px", borderRadius: "6px", border: "none", background: "#007bff", color: "white", cursor: "pointer" }}
+                    onClick={() => {
+                      setEditingLocationId(loc.id);
+                      setForm({ name: loc.name, category: loc.category, description: loc.description }) || setAdding({ lat: loc.latitude, lng: loc.longitude })
+                    }}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    style={{ marginTop: "6px", width: "100%", padding: "6px", borderRadius: "6px", border: "none", background: "#ff4d4d", color: "white", cursor: "pointer" }}
+                    onClick={async () => { await api.delete(`/locations/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } }); fetchLocations(); }}
+                  >
+                    Delete
+                  </button>
+                </Popup>
+
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
       </div>
     </div>
   );

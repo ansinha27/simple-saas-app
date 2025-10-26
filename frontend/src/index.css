@@ -43,3 +43,19 @@ html, body, #root {
 .leaflet-container {
   border-radius: 8px;
 }
+
+/* Ensure draw handles sit above the map tiles */
+.leaflet-pane.leaflet-overlay-pane,
+.leaflet-draw,
+.leaflet-draw-toolbar,
+.leaflet-draw-toolbar-top,
+.leaflet-draw-actions {
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure map tiles stay behind UI controls */
+.leaflet-pane.leaflet-tile-pane {
+  z-index: 1 !important;
+}
+

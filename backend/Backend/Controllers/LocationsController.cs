@@ -55,6 +55,35 @@ public class LocationsController : ControllerBase
         // Return created resource
         return CreatedAtAction(nameof(GetLocations), new { id = location.Id }, location);
     }
+
+    [HttpPut("{id}")]
+    [Authorize]
+public async Task<IActionResult> Update(int id, Location updated)
+{
+    var existing = await _context.Locations.FindAsync(id);
+    if (existing == null) return NotFound();
+
+    existing.Name = updated.Name;
+    existing.Category = updated.Category;
+    existing.Description = updated.Description;
+
+    await _context.SaveChangesAsync();
+    return Ok(existing);
+}
+
+[HttpDelete("{id}")]
+[Authorize]
+public async Task<IActionResult> Delete(int id)
+{
+    var existing = await _context.Locations.FindAsync(id);
+    if (existing == null) return NotFound();
+
+    _context.Locations.Remove(existing);
+    await _context.SaveChangesAsync();
+    return NoContent();
+}
+
+
 }
 
 public class CreateLocationDto
