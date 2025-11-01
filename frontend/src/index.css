@@ -50,12 +50,19 @@ html, body, #root {
 .leaflet-draw-toolbar,
 .leaflet-draw-toolbar-top,
 .leaflet-draw-actions {
-  z-index: 10000 !important;
+  z-index: 100000 !important;
   pointer-events: auto !important;
 }
 
 /* Ensure map tiles stay behind UI controls */
 .leaflet-pane.leaflet-tile-pane {
   z-index: 1 !important;
+}
+.leaflet-control-container .leaflet-draw {
+  z-index: 3000 !important;
+}
+
+.leaflet-control-container .leaflet-top.leaflet-right {
+  z-index: 3000 !important;
 }
 
