@@ -1,7 +1,3 @@
-import L from "leaflet";
-import "leaflet-draw";               // ✅ JS behaviors
-import "leaflet-draw/dist/leaflet.draw.css"; // ✅ tool styling
-
 import {
   MapContainer,
   TileLayer,
@@ -14,21 +10,22 @@ import {
 } from "react-leaflet";
 import { useEffect, useMemo, useState } from "react";
 import api from "../api";
-import Sidebar from "../components/Sidebar";
-import SearchBar from "../components/SearchBar";
+import Sidebar from "./Sidebar";
+import SearchBar from "./SearchBar";
 import { FeatureGroup } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
+import * as turf from "@turf/turf";
 
-// -------- Helpers --------
-function ClickHandler({ onClick, isDrawing }) {
+
+// --- Helpers ---
+function ClickHandler({ onClick, enabled }) {
   useMapEvents({
     click(e) {
-      if (!isDrawing) onClick(e.latlng);
+      if (enabled) onClick(e.latlng);
     },
   });
   return null;
 }
-
 
 function FlyToLocation({ position }) {
   const map = useMap();
@@ -50,55 +47,60 @@ function FlyToLocationOnSelect({ location }) {
   return null;
 }
 
-// Neon blue polygon style (Style 3)
+function FlyToParcel({ parcel }) {
+  const map = useMap();
+  useEffect(() => {
+    if (parcel?.parsed?.geometry?.coordinates) {
+      const coords = parcel.parsed.geometry.coordinates[0];
+      const lats = coords.map((c) => c[1]);
+      const lngs = coords.map((c) => c[0]);
+      const center = [
+        (Math.min(...lats) + Math.max(...lats)) / 2,
+        (Math.min(...lngs) + Math.max(...lngs)) / 2,
+      ];
+      map.flyTo(center, 16, { duration: 1.3 });
+    }
+  }, [parcel]);
+  return null;
+}
+
 const polygonStyle = {
-  color: "#2d9cdb",        // outline
+  color: "#2d9cdb",
   weight: 3,
   opacity: 1,
   fillColor: "#2d9cdb",
-  fillOpacity: 0.15,       // soft transparent fill
+  fillOpacity: 0.15,
 };
 
 function MapView() {
   const [locations, setLocations] = useState([]);
   const [polygons, setPolygons] = useState([]);
 
-  const [adding, setAdding] = useState(null); // marker draft { lat, lng }
+  const [adding, setAdding] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", category: "" });
+
   const [editingLocationId, setEditingLocationId] = useState(null);
 
-
-  // polygon draft UI state
-  const [polyDraft, setPolyDraft] = useState(null); // GeoJSON object
+  const [polyDraft, setPolyDraft] = useState(null);
   const [polyForm, setPolyForm] = useState({ name: "", description: "", category: "" });
+  const [editingPolygonId, setEditingPolygonId] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [selectedParcel, setSelectedParcel] = useState(null);
 
+  const [isAddMode, setIsAddMode] = useState(false);
 
   const token = localStorage.getItem("token");
 
-  // ----- API -----
   const fetchLocations = async () => {
-    try {
-      const res = await api.get("/locations", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setLocations(res.data || []);
-    } catch (err) {
-      console.error("Error fetching locations:", err);
-    }
+    const res = await api.get("/locations", { headers: { Authorization: `Bearer ${token}` } });
+    setLocations(res.data || []);
   };
 
   const fetchPolygons = async () => {
-    try {
-      const res = await api.get("/polygons", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPolygons(res.data || []);
-    } catch (err) {
-      console.error("Error fetching polygons:", err);
-    }
+    const res = await api.get("/polygons", { headers: { Authorization: `Bearer ${token}` } });
+    setPolygons(res.data || []);
   };
 
   useEffect(() => {
@@ -106,19 +108,17 @@ function MapView() {
     fetchPolygons();
   }, []); // eslint-disable-line
 
-  // ----- Add marker flow -----
   const handleMapClick = (latlng) => {
+    setEditingLocationId(null);
     setAdding({ lat: latlng.lat, lng: latlng.lng });
     setForm({ name: "", description: "", category: "" });
   };
 
   const saveLocation = async (e) => {
     e.preventDefault();
-    if (!adding) return;
     setLoading(true);
     try {
       if (editingLocationId) {
-        // ✅ Update existing
         await api.put(
           `/locations/${editingLocationId}`,
           {
@@ -129,7 +129,6 @@ function MapView() {
           { headers: { Authorization: `Bearer ${token}` } }
         );
       } else {
-        // ✅ Create new
         await api.post(
           "/locations",
           {
@@ -142,103 +141,152 @@ function MapView() {
           { headers: { Authorization: `Bearer ${token}` } }
         );
       }
-
       setAdding(null);
+      setEditingLocationId(null);
+      setIsAddMode(false);
       await fetchLocations();
       alert("📍 Location saved!");
-    } catch (err) {
-      console.error(err);
-      alert("Error saving location.");
     } finally {
-      setEditingLocationId(null);
-
       setLoading(false);
     }
   };
 
-  // ----- Draw polygon flow -----
   const onCreated = (e) => {
-    const layer = e.layer;
-    if (e.layerType === "polygon") {
-      const latlngs = layer.getLatLngs(); // could be multi dimensional
-      // Normalize to [ [ [lng, lat], [lng, lat], ... ] ]
-      const ring = (latlngs[0] || latlngs).map((pt) => [pt.lng, pt.lat]);
-
-      // Ensure the ring is closed
-      if (ring.length > 0 && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
-        ring.push(ring[0]);
-      }
-
-      const geojson = {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "Polygon",
-          coordinates: [ring],
-        },
-      };
-
-      setPolyDraft(geojson);
-      setPolyForm({ name: "", description: "", category: "" });
-    }
+    const ring = e.layer.getLatLngs()[0].map((pt) => [pt.lng, pt.lat]);
+    ring.push(ring[0]);
+    setEditingPolygonId(null);
+    setPolyDraft({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Polygon", coordinates: [ring] },
+    });
+    setPolyForm({ name: "", description: "", category: "" });
   };
 
-  const savePolygon = async (e) => {
-    e.preventDefault();
-    if (!polyDraft) return;
-    setLoading(true);
-    try {
+ const savePolygon = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  try {
+    // ✅ Ensure GeoJSON is Feature format
+    const turfPoly =
+      polyDraft.type === "Feature"
+        ? polyDraft
+        : turf.feature(polyDraft);
+
+    // ✅ Calculate area and perimeter
+    const areaSqM = turf.area(turfPoly);
+    const areaHectares = areaSqM / 10000;
+    const perimeterMeters = turf.length(turfPoly, { units: "meters" });
+
+    if (editingPolygonId) {
+      await api.put(
+        `/polygons/${editingPolygonId}`,
+        {
+          name: polyForm.name.trim(),
+          description: polyForm.description || null,
+          category: polyForm.category || null,
+          areaSqM,
+          areaHectares,
+          perimeterMeters,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } else {
       await api.post(
         "/polygons",
         {
           name: polyForm.name.trim(),
           description: polyForm.description || null,
           category: polyForm.category || null,
-          geoJson: JSON.stringify(polyDraft),
+          geoJson: JSON.stringify(turfPoly),
+          areaSqM,
+          areaHectares,
+          perimeterMeters,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setPolyDraft(null);
-      await fetchPolygons();
-      alert("🟦 Parcel saved!");
-    } catch (err) {
-      console.error(err);
-      alert("Error saving parcel.");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  // memoize parsed GeoJSONs for rendering
-  const parsedPolygons = useMemo(() => {
-    return polygons
-      .map((p) => {
-        try {
-          return { ...p, parsed: JSON.parse(p.geoJson) };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-  }, [polygons]);
+    setEditingPolygonId(null);
+    setPolyDraft(null);
+    await fetchPolygons();
+    alert("🟦 Parcel saved!");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+  const parsedPolygons = useMemo(
+  () => polygons.map((p) => {
+    const parsed = JSON.parse(p.geoJson);
+
+    // ✅ Ensure polygon data is always a Feature
+    const feature = parsed.type === "Feature"
+      ? parsed
+      : { type: "Feature", properties: {}, geometry: parsed };
+
+    return { ...p, parsed: feature };
+  }),
+  [polygons]
+);
+
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#fafafa" }}>
-      {/* Sidebar with filter + list + logout (hover expand) */}
+    <div style={{ display: "flex", height: "100vh", background: "#fafafa" }}>
       <Sidebar
         locations={locations}
-        onSelect={(loc) => setSelectedLocation(loc)}
+        polygons={parsedPolygons}
+        onSelectLocation={(loc) => setSelectedLocation(loc)}
+        onSelectParcel={(p) => setSelectedParcel(p)}
       />
 
-      {/* Main content */}
-      <div style={{ flex: 1, padding: "12px", position: "relative", display: "flex", flexDirection: "column" }}>
-
-        {/* Search Bar */}
-        <div style={{ marginBottom: "12px", maxWidth: "350px", zIndex: 1000 }}>
+      <div
+        style={{
+          flex: 1,
+          padding: "12px",
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+            background: "#fafafa",
+            paddingBottom: "8px",
+            paddingTop: "4px",
+            position: "sticky",
+            top: 0,
+            zIndex: 1000,
+          }}
+        >
           <SearchBar onSelectLocation={(pos) => setAdding(pos)} />
+          <button
+            onClick={() => {
+              setIsAddMode((v) => !v);
+              setAdding(null);
+              setEditingLocationId(null);
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "6px",
+              border: "none",
+              cursor: "pointer",
+              background: isAddMode ? "#d9534f" : "#2d9cdb",
+              color: "white",
+              fontWeight: 600,
+            }}
+          >
+            {isAddMode ? "Cancel Adding" : "+ Add Location"}
+          </button>
         </div>
 
-        {/* Floating Add Location Form */}
+        {/* LOCATION FORM */}
         {adding && (
           <div
             style={{
@@ -249,280 +297,196 @@ function MapView() {
               background: "white",
               padding: "16px",
               borderRadius: "10px",
-              width: "260px",
+              width: "300px",
+              maxHeight: "70vh",
+              overflowY: "auto",
               boxShadow: "0px 4px 14px rgba(0,0,0,0.15)",
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: "10px" }}>Add Location</div>
+            <button
+              type="button"
+              onClick={() => { setAdding(null); setEditingLocationId(null); }}
+              style={{
+                position: "absolute", top: "6px", right: "6px",
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer"
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ fontWeight: 600, marginBottom: "10px" }}>
+              {editingLocationId ? "Edit Location" : "Add Location"}
+            </div>
+
             <form onSubmit={saveLocation}>
-              <input
-                type="text"
-                placeholder="Name"
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Category (optional)"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
-              />
-              <textarea
-                placeholder="Description (optional)"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  resize: "vertical",
-                  minHeight: "60px",
-                  boxSizing: "border-box",
-                }}
-              />
-              <div style={{ fontSize: "12px", color: "#666", marginBottom: "10px" }}>
-                Lat: {adding.lat.toFixed(5)} | Lng: {adding.lng.toFixed(5)}
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    background: "#007bff",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {loading ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAdding(null)}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    background: "#f1f1f1",
-                    color: "#333",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
+              <input type="text" required placeholder="Name"
+                value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+
+              <input type="text" placeholder="Category (optional)"
+                value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+
+              <textarea placeholder="Description (optional)"
+                value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                style={{ width: "100%", padding: "8px", minHeight: "60px" }} />
+
+              <button type="submit" disabled={loading}
+                style={{ width: "100%", padding: "8px", background: "#007bff", color: "white", borderRadius: "6px" }}>
+                {loading ? "Saving..." : "Save"}
+              </button>
             </form>
           </div>
         )}
 
-        {/* Floating Polygon Form */}
+        {/* PARCEL FORM */}
         {polyDraft && (
           <div
             style={{
               position: "absolute",
               top: 60,
-              left: 290, // sit next to marker form
+              left: 330,
               zIndex: 1000,
               background: "white",
               padding: "16px",
               borderRadius: "10px",
-              width: "280px",
+              width: "300px",
+              maxHeight: "70vh",
+              overflowY: "auto",
               boxShadow: "0px 4px 14px rgba(0,0,0,0.15)",
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: "10px" }}>Save Parcel</div>
+            <button
+              type="button"
+              onClick={() => { setPolyDraft(null); setEditingPolygonId(null); }}
+              style={{
+                position: "absolute", top: "6px", right: "6px",
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer"
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ fontWeight: 600, marginBottom: "10px" }}>
+              {editingPolygonId ? "Edit Parcel" : "Save Parcel"}
+            </div>
+
             <form onSubmit={savePolygon}>
-              <input
-                type="text"
-                placeholder="Name"
-                required
-                value={polyForm.name}
-                onChange={(e) => setPolyForm({ ...polyForm, name: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Category (optional)"
-                value={polyForm.category}
-                onChange={(e) => setPolyForm({ ...polyForm, category: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  boxSizing: "border-box",
-                }}
-              />
-              <textarea
-                placeholder="Description (optional)"
-                value={polyForm.description}
-                onChange={(e) => setPolyForm({ ...polyForm, description: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  marginBottom: "8px",
-                  borderRadius: "6px",
-                  border: "1px solid #ccc",
-                  resize: "vertical",
-                  minHeight: "60px",
-                  boxSizing: "border-box",
-                }}
-              />
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    background: "#2d9cdb",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  {loading ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPolyDraft(null)}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    background: "#f1f1f1",
-                    color: "#333",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
+              <input type="text" required placeholder="Name"
+                value={polyForm.name} onChange={(e) => setPolyForm({ ...polyForm, name: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+
+              <input type="text" placeholder="Category (optional)"
+                value={polyForm.category} onChange={(e) => setPolyForm({ ...polyForm, category: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+
+              <textarea placeholder="Description (optional)"
+                value={polyForm.description} onChange={(e) => setPolyForm({ ...polyForm, description: e.target.value })}
+                style={{ width: "100%", padding: "8px", minHeight: "60px" }} />
+
+              <button type="submit"
+                style={{ width: "100%", padding: "8px", background: "#2d9cdb", color: "white", borderRadius: "6px" }}>
+                {loading ? "Saving..." : "Save"}
+              </button>
             </form>
           </div>
         )}
 
         {/* MAP */}
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <MapContainer
-            center={[51.509, -0.118]} // London-ish default; adjust to your demo area
-            zoom={12}
-            doubleClickZoom={false}
-            worldCopyJump={false}
-            maxBounds={[[-85, -180], [85, 180]]}
-            maxBoundsViscosity={1.0}
-            minZoom={3}
-            maxZoom={19}
+        <MapContainer
+          center={[51.509, -0.118]}
+          zoom={12}
+          style={{ width: "100%", flex: 1, borderRadius: "12px", overflow: "hidden" }}
+          zoomControl={false}
+        >
+          <ZoomControl position="bottomright" />
+          <FlyToLocation position={adding} />
+          <FlyToLocationOnSelect location={selectedLocation} />
+          <FlyToParcel parcel={selectedParcel} />
 
-            style={{ width: "100%", height: "100%", borderRadius: "12px", position: "relative", zIndex: 1, overflow: "hidden" }}
-            zoomControl={false}
-          >
-            <ZoomControl position="bottomright" />
-            <FlyToLocation position={adding} />
-            <FlyToLocationOnSelect location={selectedLocation} />
-            <ClickHandler onClick={handleMapClick} isDrawing={isDrawing} />
+          <ClickHandler onClick={handleMapClick} enabled={isAddMode} />
 
-            <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              noWrap={true}
-              bounds={[[-85, -180], [85, 180]]}
+          <TileLayer
+            attribution='&copy; OpenStreetMap contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          <FeatureGroup>
+            <EditControl
+              position="topright"
+              draw={{ polygon: true, polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false }}
+              edit={{ edit: false, remove: false }}
+              onCreated={onCreated}
             />
+          </FeatureGroup>
+
+          {parsedPolygons.map((p) => (
+            <GeoJSON key={p.id} data={p.parsed} style={() => polygonStyle}>
+              <Popup>
+                <strong>{p.name}</strong><br />
+                {p.category || ""}<br />
+                {p.description || ""}
+<br />
+<b>Area:</b> {p.areaHectares?.toFixed(2)} ha ({p.areaSqM?.toLocaleString()} m²)<br />
+<b>Perimeter:</b> {p.perimeterMeters?.toFixed(0)} m
 
 
-            {/* Draw tools */}
-            <FeatureGroup>
-              <EditControl
-                position="topright"
-                draw={{
-                  polygon: true,
-                  polyline: false,
-                  rectangle: false,
-                  circle: false,
-                  marker: false,
-                  circlemarker: false,
-                }}
-                edit={{ edit: false, remove: false }}
-                onDrawStart={() => setIsDrawing(true)}
-                onDrawStop={() => setIsDrawing(false)}
-                onCreated={(e) => {
-                  setIsDrawing(false);
-                  onCreated(e);
-                }}
-              />
-            </FeatureGroup>
+                <button
+                  style={{ marginTop: "8px", width: "100%", padding: "6px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
+                  onClick={() => {
+                    setEditingPolygonId(p.id);
+                    setPolyForm({ name: p.name || "", category: p.category || "", description: p.description || "" });
+                    setPolyDraft(p.parsed);
+                  }}
+                >
+                  Edit
+                </button>
 
-            {/* Render saved polygons */}
-            {parsedPolygons.map((p) => (
-              <GeoJSON key={p.id} data={p.parsed} style={() => polygonStyle}>
-                {/* You could add onEachFeature to bind popups with p.name, etc. */}
-              </GeoJSON>
-            ))}
+                <button
+                  style={{ marginTop: "6px", width: "100%", padding: "6px", borderRadius: "6px", background: "#ff4d4d", color: "white", border: "none", cursor: "pointer" }}
+                  onClick={async () => {
+                    await api.delete(`/polygons/${p.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    fetchPolygons();
+                  }}
+                >
+                  Delete
+                </button>
+              </Popup>
+            </GeoJSON>
+          ))}
 
-            {/* Render saved markers */}
-            {locations.map((loc) => (
-              <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
+          {locations.map((loc) => (
+            <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
+              <Popup>
+                <strong>{loc.name}</strong><br />
+                {loc.category || ""}<br />
+                {loc.description || ""}
 
-                <Popup>
-                  <div style={{ fontWeight: 600, marginBottom: "4px" }}>{loc.name}</div>
-                  {loc.category && <div style={{ fontSize: "13px" }}>Category: {loc.category}</div>}
-                  {loc.description && <div style={{ fontSize: "13px", marginTop: "4px" }}>{loc.description}</div>}
+                <button
+                  style={{ marginTop: "8px", width: "100%", padding: "6px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
+                  onClick={() => {
+                    setEditingLocationId(loc.id);
+                    setForm({ name: loc.name, category: loc.category, description: loc.description });
+                    setAdding({ lat: loc.latitude, lng: loc.longitude });
+                    setIsAddMode(true);
+                  }}
+                >
+                  Edit
+                </button>
 
-                  <button
-                    style={{ marginTop: "8px", width: "100%", padding: "6px", borderRadius: "6px", border: "none", background: "#007bff", color: "white", cursor: "pointer" }}
-                    onClick={() => {
-                      setEditingLocationId(loc.id);
-                      setForm({ name: loc.name, category: loc.category, description: loc.description }) || setAdding({ lat: loc.latitude, lng: loc.longitude })
-                    }}
-                  >
-                    Edit
-                  </button>
-
-                  <button
-                    style={{ marginTop: "6px", width: "100%", padding: "6px", borderRadius: "6px", border: "none", background: "#ff4d4d", color: "white", cursor: "pointer" }}
-                    onClick={async () => { await api.delete(`/locations/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } }); fetchLocations(); }}
-                  >
-                    Delete
-                  </button>
-                </Popup>
-
-              </Marker>
-            ))}
-          </MapContainer>
-        </div>
+                <button
+                  style={{ marginTop: "6px", width: "100%", padding: "6px", borderRadius: "6px", background: "#ff4d4d", color: "white", border: "none", cursor: "pointer" }}
+                  onClick={async () => {
+                    await api.delete(`/locations/${loc.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    fetchLocations();
+                  }}
+                >
+                  Delete
+                </button>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
     </div>
   );
