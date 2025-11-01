@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { getUsername } from "../auth";
 import { useState } from "react";
 
-function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel }) {
+function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHoverParcel, onHoverParcelEnd }) {
   const [open, setOpen] = useState(false);
 
   const [locationFilter, setLocationFilter] = useState("");
@@ -95,12 +95,21 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel }) {
           />
           <div style={{ maxHeight: "28vh", overflowY: "auto" }}>
             {filteredParcels.map((p) => (
-              <div key={p.id}
+              <div
+                key={p.id}
                 onClick={() => onSelectParcel(p)}
+                onMouseEnter={() => onHoverParcel(p)}
+                onMouseLeave={onHoverParcelEnd}
                 style={{
-                  padding: "8px", borderRadius: "6px",
-                  marginBottom: "6px", cursor: "pointer", background: "#444"
-                }}>
+                  padding: "8px",
+                  borderRadius: "6px",
+                  marginBottom: "6px",
+                  cursor: "pointer",
+                  background: "#444",
+                  transition: "0.2s",
+                  border: "1px solid transparent"
+                }}
+              >
                 <strong>{p.name}</strong>
                 {p.category && (
                   <div style={{ fontSize: "12px", opacity: 0.8 }}>{p.category}</div>
@@ -111,7 +120,6 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel }) {
         </>
       )}
 
-      {/* Logout */}
       {open && (
         <button
           onClick={logout}

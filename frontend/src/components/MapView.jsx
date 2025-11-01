@@ -8,14 +8,13 @@ import {
   useMap,
   GeoJSON,
 } from "react-leaflet";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import api from "../api";
 import Sidebar from "./Sidebar";
 import SearchBar from "./SearchBar";
 import { FeatureGroup } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 import * as turf from "@turf/turf";
-
 
 // --- Helpers ---
 function ClickHandler({ onClick, enabled }) {
@@ -90,6 +89,7 @@ function MapView() {
   const [selectedParcel, setSelectedParcel] = useState(null);
 
   const [isAddMode, setIsAddMode] = useState(false);
+  const featureGroupRef = useRef(null);
 
   const token = localStorage.getItem("token");
 
@@ -163,75 +163,71 @@ function MapView() {
     setPolyForm({ name: "", description: "", category: "" });
   };
 
- const savePolygon = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  try {
-    // ✅ Ensure GeoJSON is Feature format
-    const turfPoly =
-      polyDraft.type === "Feature"
-        ? polyDraft
-        : turf.feature(polyDraft);
+  const savePolygon = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const turfPoly =
+        polyDraft.type === "Feature"
+          ? polyDraft
+          : turf.feature(polyDraft);
 
-    // ✅ Calculate area and perimeter
-    const areaSqM = turf.area(turfPoly);
-    const areaHectares = areaSqM / 10000;
-    const perimeterMeters = turf.length(turfPoly, { units: "meters" });
+      const areaSqM = turf.area(turfPoly);
+      const areaHectares = areaSqM / 10000;
+      const perimeterMeters = turf.length(turfPoly, { units: "meters" });
 
-    if (editingPolygonId) {
-      await api.put(
-        `/polygons/${editingPolygonId}`,
-        {
-          name: polyForm.name.trim(),
-          description: polyForm.description || null,
-          category: polyForm.category || null,
-          areaSqM,
-          areaHectares,
-          perimeterMeters,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    } else {
-      await api.post(
-        "/polygons",
-        {
-          name: polyForm.name.trim(),
-          description: polyForm.description || null,
-          category: polyForm.category || null,
-          geoJson: JSON.stringify(turfPoly),
-          areaSqM,
-          areaHectares,
-          perimeterMeters,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      if (editingPolygonId) {
+        await api.put(
+          `/polygons/${editingPolygonId}`,
+          {
+            name: polyForm.name.trim(),
+            description: polyForm.description || null,
+            category: polyForm.category || null,
+            areaSqM,
+            areaHectares,
+            perimeterMeters,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        await api.post(
+          "/polygons",
+          {
+            name: polyForm.name.trim(),
+            description: polyForm.description || null,
+            category: polyForm.category || null,
+            geoJson: JSON.stringify(turfPoly),
+            areaSqM,
+            areaHectares,
+            perimeterMeters,
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      setEditingPolygonId(null);
+      setPolyDraft(null);
+      await fetchPolygons();
+      // ✅ Remove drawn layers from map immediately
+      if (featureGroupRef.current) featureGroupRef.current.clearLayers();
+      alert("🟦 Parcel saved!");
+    } finally {
+      setLoading(false);
     }
-
-    setEditingPolygonId(null);
-    setPolyDraft(null);
-    await fetchPolygons();
-    alert("🟦 Parcel saved!");
-  } finally {
-    setLoading(false);
-  }
-};
-
-
+  };
 
   const parsedPolygons = useMemo(
-  () => polygons.map((p) => {
-    const parsed = JSON.parse(p.geoJson);
+    () => polygons.map((p) => {
+      const parsed = JSON.parse(p.geoJson);
 
-    // ✅ Ensure polygon data is always a Feature
-    const feature = parsed.type === "Feature"
-      ? parsed
-      : { type: "Feature", properties: {}, geometry: parsed };
+      const feature = parsed.type === "Feature"
+        ? parsed
+        : { type: "Feature", properties: {}, geometry: parsed };
 
-    return { ...p, parsed: feature };
-  }),
-  [polygons]
-);
-
+      return { ...p, parsed: feature };
+    }),
+    [polygons]
+  );
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#fafafa" }}>
@@ -308,7 +304,7 @@ function MapView() {
               onClick={() => { setAdding(null); setEditingLocationId(null); }}
               style={{
                 position: "absolute", top: "6px", right: "6px",
-                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer"
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1
               }}
             >
               ✕
@@ -321,15 +317,15 @@ function MapView() {
             <form onSubmit={saveLocation}>
               <input type="text" required placeholder="Name"
                 value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
 
               <input type="text" placeholder="Category (optional)"
                 value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
 
               <textarea placeholder="Description (optional)"
                 value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                style={{ width: "100%", padding: "8px", minHeight: "60px" }} />
+                style={{ width: "100%", padding: "8px", minHeight: "60px", boxSizing: "border-box" }} />
 
               <button type="submit" disabled={loading}
                 style={{ width: "100%", padding: "8px", background: "#007bff", color: "white", borderRadius: "6px" }}>
@@ -361,7 +357,7 @@ function MapView() {
               onClick={() => { setPolyDraft(null); setEditingPolygonId(null); }}
               style={{
                 position: "absolute", top: "6px", right: "6px",
-                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer"
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1
               }}
             >
               ✕
@@ -374,15 +370,15 @@ function MapView() {
             <form onSubmit={savePolygon}>
               <input type="text" required placeholder="Name"
                 value={polyForm.name} onChange={(e) => setPolyForm({ ...polyForm, name: e.target.value })}
-                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
 
               <input type="text" placeholder="Category (optional)"
                 value={polyForm.category} onChange={(e) => setPolyForm({ ...polyForm, category: e.target.value })}
-                style={{ width: "100%", padding: "8px", marginBottom: "8px" }} />
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
 
               <textarea placeholder="Description (optional)"
                 value={polyForm.description} onChange={(e) => setPolyForm({ ...polyForm, description: e.target.value })}
-                style={{ width: "100%", padding: "8px", minHeight: "60px" }} />
+                style={{ width: "100%", padding: "8px", minHeight: "60px", boxSizing: "border-box" }} />
 
               <button type="submit"
                 style={{ width: "100%", padding: "8px", background: "#2d9cdb", color: "white", borderRadius: "6px" }}>
@@ -398,6 +394,11 @@ function MapView() {
           zoom={12}
           style={{ width: "100%", flex: 1, borderRadius: "12px", overflow: "hidden" }}
           zoomControl={false}
+          worldCopyJump={false}
+            maxBounds={[[-85, -180], [85, 180]]}
+            maxBoundsViscosity={1.0}
+            minZoom={3}
+            maxZoom={19}
         >
           <ZoomControl position="bottomright" />
           <FlyToLocation position={adding} />
@@ -409,9 +410,11 @@ function MapView() {
           <TileLayer
             attribution='&copy; OpenStreetMap contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            noWrap={true}
+              bounds={[[-85, -180], [85, 180]]}
           />
 
-          <FeatureGroup>
+          <FeatureGroup ref={featureGroupRef}>
             <EditControl
               position="topright"
               draw={{ polygon: true, polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false }}
@@ -426,10 +429,9 @@ function MapView() {
                 <strong>{p.name}</strong><br />
                 {p.category || ""}<br />
                 {p.description || ""}
-<br />
-<b>Area:</b> {p.areaHectares?.toFixed(2)} ha ({p.areaSqM?.toLocaleString()} m²)<br />
-<b>Perimeter:</b> {p.perimeterMeters?.toFixed(0)} m
-
+                <br />
+                <b>Area:</b> {p.areaHectares?.toFixed(2)} ha ({p.areaSqM?.toLocaleString()} m²)<br />
+                <b>Perimeter:</b> {p.perimeterMeters?.toFixed(0)} m
 
                 <button
                   style={{ marginTop: "8px", width: "100%", padding: "6px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
@@ -446,8 +448,11 @@ function MapView() {
                   style={{ marginTop: "6px", width: "100%", padding: "6px", borderRadius: "6px", background: "#ff4d4d", color: "white", border: "none", cursor: "pointer" }}
                   onClick={async () => {
                     await api.delete(`/polygons/${p.id}`, { headers: { Authorization: `Bearer ${token}` } });
-                    fetchPolygons();
-                  }}
+                    setPolygons((prev) => prev.filter((poly) => poly.id !== p.id));
+
+                      await fetchPolygons();
+                      if (featureGroupRef.current) featureGroupRef.current.clearLayers();
+                    }}
                 >
                   Delete
                 </button>
