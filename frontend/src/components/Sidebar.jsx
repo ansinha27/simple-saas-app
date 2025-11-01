@@ -47,10 +47,10 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
         {open ? `👋 Welcome, ${username}` : "👋"}
       </div>
 
-      {/* Locations */}
+      {/* YourLocations */}
       {open && (
         <>
-          <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Locations</div>
+          <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Your Locations</div>
           <input
             type="text"
             placeholder="Search locations…"
@@ -79,10 +79,10 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
         </>
       )}
 
-      {/* Parcels */}
+      {/* YourParcels */}
       {open && (
         <>
-          <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Parcels</div>
+          <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Your Parcels</div>
           <input
             type="text"
             placeholder="Search parcels…"

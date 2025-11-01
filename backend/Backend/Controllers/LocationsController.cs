@@ -23,8 +23,16 @@ public class LocationsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<IEnumerable<Location>>> GetLocations()
     {
-        // For now, return all. Later we can filter by user or add layers/filters.
-        return await _context.Locations.AsNoTracking().ToListAsync();
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr))
+            return Unauthorized("Missing user id claim.");
+
+        int userId = int.Parse(userIdStr);
+
+        return await _context.Locations
+            .Where(l => l.CreatedByUserId == userId)
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     // POST: /api/locations
@@ -52,38 +60,51 @@ public class LocationsController : ControllerBase
         _context.Locations.Add(location);
         await _context.SaveChangesAsync();
 
-        // Return created resource
         return CreatedAtAction(nameof(GetLocations), new { id = location.Id }, location);
     }
 
+    // PUT: /api/locations/{id}
     [HttpPut("{id}")]
     [Authorize]
-public async Task<IActionResult> Update(int id, Location updated)
-{
-    var existing = await _context.Locations.FindAsync(id);
-    if (existing == null) return NotFound();
+    public async Task<IActionResult> Update(int id, Location updated)
+    {
+        var existing = await _context.Locations.FindAsync(id);
+        if (existing == null) 
+            return NotFound();
 
-    existing.Name = updated.Name;
-    existing.Category = updated.Category;
-    existing.Description = updated.Description;
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int userId = int.Parse(userIdStr);
 
-    await _context.SaveChangesAsync();
-    return Ok(existing);
-}
+        if (existing.CreatedByUserId != userId)
+            return Forbid("You do not own this location.");
 
-[HttpDelete("{id}")]
-[Authorize]
-public async Task<IActionResult> Delete(int id)
-{
-    var existing = await _context.Locations.FindAsync(id);
-    if (existing == null) return NotFound();
+        existing.Name = updated.Name;
+        existing.Category = updated.Category;
+        existing.Description = updated.Description;
 
-    _context.Locations.Remove(existing);
-    await _context.SaveChangesAsync();
-    return NoContent();
-}
+        await _context.SaveChangesAsync();
+        return Ok(existing);
+    }
 
+    // DELETE: /api/locations/{id}
+    [HttpDelete("{id}")]
+    [Authorize]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var existing = await _context.Locations.FindAsync(id);
+        if (existing == null) 
+            return NotFound();
 
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int userId = int.Parse(userIdStr);
+
+        if (existing.CreatedByUserId != userId)
+            return Forbid("You do not own this location.");
+
+        _context.Locations.Remove(existing);
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
 }
 
 public class CreateLocationDto
