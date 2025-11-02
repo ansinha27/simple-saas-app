@@ -28,7 +28,8 @@ public class AuthService
         var user = new User
         {
             Username = username,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password)
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = "User" 
         };
 
         _context.Users.Add(user);
@@ -51,7 +52,8 @@ public class AuthService
         var claims = new[]
         {
             new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Role, user.Role)
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));

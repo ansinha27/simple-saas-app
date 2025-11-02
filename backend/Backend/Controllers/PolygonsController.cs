@@ -12,15 +12,30 @@ namespace Backend.Controllers;
 public class PolygonsController : ControllerBase
 {
     private readonly AppDbContext _context;
-    public PolygonsController(AppDbContext context) { _context = context; }
+    public PolygonsController(AppDbContext context)
+    {
+        _context = context;
+    }
 
     // GET api/polygons
     [HttpGet]
     [Authorize]
     public async Task<ActionResult<IEnumerable<SitePolygon>>> Get()
     {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userIdStr))
+            return Unauthorized("Missing user id claim.");
+
+        int userId = int.Parse(userIdStr);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+    if (role == "Admin")
         return await _context.SitePolygons.AsNoTracking().ToListAsync();
 
+        return await _context.SitePolygons
+            .Where(p => p.CreatedByUserId == userId)
+            .AsNoTracking()
+            .ToListAsync();
     }
 
     // POST api/polygons
@@ -41,14 +56,12 @@ public class PolygonsController : ControllerBase
             GeoJson = dto.GeoJson,
             Description = dto.Description,
             Category = dto.Category,
-            CreatedByUserId = int.Parse(userIdStr),
             AreaSqM = dto.AreaSqM,
             AreaHectares = dto.AreaHectares,
-            PerimeterMeters = dto.PerimeterMeters
-            
-
-
+            PerimeterMeters = dto.PerimeterMeters,
+            CreatedByUserId = int.Parse(userIdStr)
         };
+
         _context.SitePolygons.Add(poly);
         await _context.SaveChangesAsync();
 
@@ -56,56 +69,58 @@ public class PolygonsController : ControllerBase
     }
 
     // PUT api/polygons/{id}
-[HttpPut("{id}")]
-[Authorize]
-public async Task<ActionResult<SitePolygon>> Put(int id, [FromBody] UpdatePolygonDto dto)
-{
-    
-
-    var poly = await _context.SitePolygons.FindAsync(id);
+    [HttpPut("{id}")]
+    [Authorize]
+    public async Task<ActionResult<SitePolygon>> Put(int id, [FromBody] UpdatePolygonDto dto)
+    {
+        var poly = await _context.SitePolygons.FindAsync(id);
         if (poly == null)
             return NotFound("Parcel not found.");
 
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int userId = int.Parse(userIdStr);
 
-    poly.Name = dto.Name.Trim();
-    poly.Description = dto.Description;
-    poly.Category = dto.Category;
-    poly.AreaSqM = dto.AreaSqM;
-    poly.AreaHectares = dto.AreaHectares;
-    poly.PerimeterMeters = dto.PerimeterMeters;
+        var role = User.FindFirstValue(ClaimTypes.Role);
 
-    await _context.SaveChangesAsync();
-    return Ok(poly);
+// Allow admins to edit any location
+if (role != "Admin" && poly.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
 
-    // Optional: enforce ownership if needed
-    // if (poly.CreatedByUserId != int.Parse(userIdStr))
-    //     return Forbid();
 
-}
+        poly.Name = dto.Name.Trim();
+        poly.Description = dto.Description;
+        poly.Category = dto.Category;
+        poly.AreaSqM = dto.AreaSqM;
+        poly.AreaHectares = dto.AreaHectares;
+        poly.PerimeterMeters = dto.PerimeterMeters;
+
+        await _context.SaveChangesAsync();
+        return Ok(poly);
+    }
 
     // DELETE api/polygons/{id}
     [HttpDelete("{id}")]
     [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(userIdStr))
-            return Unauthorized("Missing user id claim.");
-
         var poly = await _context.SitePolygons.FindAsync(id);
         if (poly == null)
             return NotFound("Parcel not found.");
 
-        // Optional: enforce ownership if needed
-        // if (poly.CreatedByUserId != int.Parse(userIdStr))
-        //     return Forbid();
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int userId = int.Parse(userIdStr);
+
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+// Allow admins to edit any location
+if (role != "Admin" && poly.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
+
 
         _context.SitePolygons.Remove(poly);
         await _context.SaveChangesAsync();
         return NoContent();
     }
-
-
 }
 
 public class CreatePolygonDto
@@ -120,7 +135,7 @@ public class CreatePolygonDto
     public double PerimeterMeters { get; set; }
 }
 
-public class UpdatePolygonDto  // add new dto
+public class UpdatePolygonDto
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }

@@ -1,18 +1,29 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./components/PrivateRoute";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import MapView from "./components/MapView";
 import LandingPage from "./components/LandingPage";
+import UserManagementPage from "./components/UserManagementPage";
+
 import "./index.css";
 
 function App() {
   return (
     <Router basename="/">
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Navigate to="/app" replace />} />
+        <Route path="/app" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+         path="/admin/users"
+         element={
+           <PrivateRoute roles={["Admin"]}>
+             <UserManagementPage />
+           </PrivateRoute>
+         }
+       />
         <Route
           path="/map"
           element={
@@ -25,5 +36,7 @@ function App() {
     </Router>
   );
 }
+
+
 
 export default App;
