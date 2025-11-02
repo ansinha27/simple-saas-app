@@ -332,16 +332,108 @@ function MapView() {
 
         {/* LOCATION FORM */}
         {adding && (
-          // (unchanged)
-          <>
-          </>
+           <div
+            style={{
+              position: "absolute",
+              top: 60,
+              left: 12,
+              zIndex: 1000,
+              background: "white",
+              padding: "16px",
+              borderRadius: "10px",
+              width: "300px",
+              maxHeight: "70vh",
+              overflowY: "auto",
+              boxShadow: "0px 4px 14px rgba(0,0,0,0.15)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => { setAdding(null); setEditingLocationId(null); }}
+              style={{
+                position: "absolute", top: "6px", right: "6px",
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ fontWeight: 600, marginBottom: "10px" }}>
+              {editingLocationId ? "Edit Location" : "Add Location"}
+            </div>
+
+            <form onSubmit={saveLocation}>
+              <input type="text" required placeholder="Name"
+                value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
+
+              <input type="text" placeholder="Category (optional)"
+                value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
+
+              <textarea placeholder="Description (optional)"
+                value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                style={{ width: "100%", padding: "8px", minHeight: "60px", boxSizing: "border-box" }} />
+
+              <button type="submit" disabled={loading}
+                style={{ width: "100%", padding: "8px", background: "#007bff", color: "white", borderRadius: "6px" }}>
+                {loading ? "Saving..." : "Save"}
+              </button>
+            </form>
+          </div>
         )}
 
         {/* PARCEL FORM */}
         {polyDraft && (
-          // (unchanged)
-          <>
-          </>
+          <div
+            style={{
+              position: "absolute",
+              top: 60,
+              left: 330,
+              zIndex: 1000,
+              background: "white",
+              padding: "16px",
+              borderRadius: "10px",
+              width: "300px",
+              maxHeight: "70vh",
+              overflowY: "auto",
+              boxShadow: "0px 4px 14px rgba(0,0,0,0.15)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => { setPolyDraft(null); setEditingPolygonId(null); }}
+              style={{
+                position: "absolute", top: "6px", right: "6px",
+                background: "transparent", border: "none", fontSize: "18px", cursor: "pointer", lineHeight: 1
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={{ fontWeight: 600, marginBottom: "10px" }}>
+              {editingPolygonId ? "Edit Parcel" : "Save Parcel"}
+            </div>
+
+            <form onSubmit={savePolygon}>
+              <input type="text" required placeholder="Name"
+                value={polyForm.name} onChange={(e) => setPolyForm({ ...polyForm, name: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
+
+              <input type="text" placeholder="Category (optional)"
+                value={polyForm.category} onChange={(e) => setPolyForm({ ...polyForm, category: e.target.value })}
+                style={{ width: "100%", padding: "8px", marginBottom: "8px", boxSizing: "border-box" }} />
+
+              <textarea placeholder="Description (optional)"
+                value={polyForm.description} onChange={(e) => setPolyForm({ ...polyForm, description: e.target.value })}
+                style={{ width: "100%", padding: "8px", minHeight: "60px", boxSizing: "border-box" }} />
+
+              <button type="submit"
+                style={{ width: "100%", padding: "8px", background: "#2d9cdb", color: "white", borderRadius: "6px" }}>
+                {loading ? "Saving..." : "Save"}
+              </button>
+            </form>
+          </div>
         )}
 
         {/* MAP */}
