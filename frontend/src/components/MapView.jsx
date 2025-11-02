@@ -18,9 +18,37 @@ import * as turf from "@turf/turf";
 import { jwtDecode } from "jwt-decode";
 import { useNavigate } from "react-router-dom";
 import UserManager from "./UserManager";
-import L from "leaflet"; // ✅ ADDED
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
+// ✅ These 3 imports bundle the icon files correctly (Vite + Render)
+/*import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
+
+// ✅ Fix default Leaflet icon paths for Vite (local + Render)
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIcon2x,
+  shadowUrl: markerShadow,
+});*/
+
+
+
+// 🔧 Robust fix for icon paths across Vite/CRA/Render
+// 1) Remove Leaflet's internal URL resolver
 delete L.Icon.Default.prototype._getIconUrl;
+
+// 2) Point to the bundled assets explicitly
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: new URL("leaflet/dist/images/marker-icon-2x.png", import.meta.url).toString(),
+  iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).toString(),
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).toString(),
+});
+
+// 3) As an extra safety net, set default marker icon globally
+L.Marker.prototype.options.icon = new L.Icon.Default();
+
 
 
 // --- Helpers ---
