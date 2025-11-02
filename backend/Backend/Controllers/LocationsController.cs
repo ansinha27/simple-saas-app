@@ -28,6 +28,10 @@ public class LocationsController : ControllerBase
             return Unauthorized("Missing user id claim.");
 
         int userId = int.Parse(userIdStr);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+    if (role == "Admin")
+        return await _context.Locations.AsNoTracking().ToListAsync();
 
         return await _context.Locations
             .Where(l => l.CreatedByUserId == userId)
@@ -75,8 +79,12 @@ public class LocationsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         int userId = int.Parse(userIdStr);
 
-        if (existing.CreatedByUserId != userId)
-            return Forbid("You do not own this location.");
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+// Allow admins to edit any location
+if (role != "Admin" && existing.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
+
 
         existing.Name = updated.Name;
         existing.Category = updated.Category;
@@ -98,8 +106,12 @@ public class LocationsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         int userId = int.Parse(userIdStr);
 
-        if (existing.CreatedByUserId != userId)
-            return Forbid("You do not own this location.");
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+// Allow admins to edit any location
+if (role != "Admin" && existing.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
+
 
         _context.Locations.Remove(existing);
         await _context.SaveChangesAsync();

@@ -15,7 +15,7 @@ function Register() {
 
       if (res.status === 200 && res.data.token) {
         alert("✅ Registration successful! Please log in.");
-        navigate("/");
+        navigate("/login");
       } else {
         alert("Registration failed, please try again.");
       }

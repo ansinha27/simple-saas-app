@@ -27,6 +27,10 @@ public class PolygonsController : ControllerBase
             return Unauthorized("Missing user id claim.");
 
         int userId = int.Parse(userIdStr);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+    if (role == "Admin")
+        return await _context.SitePolygons.AsNoTracking().ToListAsync();
 
         return await _context.SitePolygons
             .Where(p => p.CreatedByUserId == userId)
@@ -76,8 +80,12 @@ public class PolygonsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         int userId = int.Parse(userIdStr);
 
-        if (poly.CreatedByUserId != userId)
-            return Forbid("You do not own this parcel.");
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+// Allow admins to edit any location
+if (role != "Admin" && poly.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
+
 
         poly.Name = dto.Name.Trim();
         poly.Description = dto.Description;
@@ -102,8 +110,12 @@ public class PolygonsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         int userId = int.Parse(userIdStr);
 
-        if (poly.CreatedByUserId != userId)
-            return Forbid("You do not own this parcel.");
+        var role = User.FindFirstValue(ClaimTypes.Role);
+
+// Allow admins to edit any location
+if (role != "Admin" && poly.CreatedByUserId != userId)
+    return Forbid("You do not own this location.");
+
 
         _context.SitePolygons.Remove(poly);
         await _context.SaveChangesAsync();

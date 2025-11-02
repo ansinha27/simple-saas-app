@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { getUsername } from "../auth";
 import { useState } from "react";
+import { getUsername } from "../auth";
+import { jwtDecode } from "jwt-decode";
 
 function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHoverParcel, onHoverParcelEnd }) {
   const [open, setOpen] = useState(false);
@@ -11,9 +12,18 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
   const username = getUsername();
   const navigate = useNavigate();
 
+  // ✅ Decode role from token
+  const token = localStorage.getItem("token");
+  const decoded = token ? jwtDecode(token) : null;
+  const role =
+    decoded?.role ||
+    decoded?.Role ||
+    decoded?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    "User";
+
   const logout = () => {
     localStorage.removeItem("token");
-    navigate("/");
+    navigate("/app");
   };
 
   const filteredLocations = locations.filter((loc) =>
@@ -43,11 +53,12 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
         flexDirection: "column",
       }}
     >
+      {/* Greeting */}
       <div style={{ marginBottom: "20px", whiteSpace: "nowrap", fontWeight: 600 }}>
         {open ? `👋 Welcome, ${username}` : "👋"}
       </div>
 
-      {/* YourLocations */}
+      {/* Locations */}
       {open && (
         <>
           <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Your Locations</div>
@@ -63,12 +74,17 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
           />
           <div style={{ maxHeight: "28vh", overflowY: "auto", marginBottom: "14px" }}>
             {filteredLocations.map((loc) => (
-              <div key={loc.id}
+              <div
+                key={loc.id}
                 onClick={() => onSelectLocation(loc)}
                 style={{
-                  padding: "8px", borderRadius: "6px",
-                  marginBottom: "6px", cursor: "pointer", background: "#444"
-                }}>
+                  padding: "8px",
+                  borderRadius: "6px",
+                  marginBottom: "6px",
+                  cursor: "pointer",
+                  background: "#444"
+                }}
+              >
                 <strong>{loc.name}</strong>
                 {loc.category && (
                   <div style={{ fontSize: "12px", opacity: 0.8 }}>{loc.category}</div>
@@ -79,7 +95,7 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
         </>
       )}
 
-      {/* YourParcels */}
+      {/* Parcels */}
       {open && (
         <>
           <div style={{ fontSize: "14px", opacity: 0.9, marginBottom: "6px" }}>Your Parcels</div>
@@ -98,7 +114,7 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
               <div
                 key={p.id}
                 onClick={() => onSelectParcel(p)}
-                onMouseEnter={() => onHoverParcel(p)}
+                onMouseEnter={() => onHoverParcel?.(p)}
                 onMouseLeave={onHoverParcelEnd}
                 style={{
                   padding: "8px",
@@ -106,8 +122,6 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
                   marginBottom: "6px",
                   cursor: "pointer",
                   background: "#444",
-                  transition: "0.2s",
-                  border: "1px solid transparent"
                 }}
               >
                 <strong>{p.name}</strong>
@@ -120,12 +134,21 @@ function Sidebar({ locations, polygons, onSelectLocation, onSelectParcel, onHove
         </>
       )}
 
+      
+
+      {/* Logout */}
       {open && (
         <button
           onClick={logout}
           style={{
-            marginTop: "auto", width: "100%", padding: "8px",
-            background: "#ff5757", border: "none", borderRadius: "6px", cursor: "pointer", color: "white"
+            marginTop: "auto",
+            width: "100%",
+            padding: "8px",
+            background: "#ff5757",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            color: "white",
           }}
         >
           Logout
