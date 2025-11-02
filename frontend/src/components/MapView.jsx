@@ -20,6 +20,9 @@ import { useNavigate } from "react-router-dom";
 import UserManager from "./UserManager";
 import L from "leaflet"; // ✅ ADDED
 
+delete L.Icon.Default.prototype._getIconUrl;
+
+
 // --- Helpers ---
 function ClickHandler({ onClick, enabled }) {
   useMapEvents({
