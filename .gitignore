@@ -1,0 +1,13 @@
+# Dotnet build output
+bin/
+obj/
+
+# Node
+node_modules/
+
+# Environment and config secrets
+appsettings*.json
+secrets.json
+
+# Local tooling
+.env
