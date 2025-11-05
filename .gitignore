@@ -6,8 +6,9 @@ obj/
 node_modules/
 
 # Environment and config secrets
-appsettings*.json
 secrets.json
+appsettings.Development.json
+
 
 # Local tooling
 .env
