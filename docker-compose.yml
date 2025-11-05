@@ -19,10 +19,10 @@ services:
       - db
     environment:
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=db;Database=simple_saas_db;Username=postgres;Password=postgres
-      - Jwt__Key=ThisIsASuperStrongSecretKeyThatIsAtLeast32CharsLong123!
-      - Jwt__Issuer=simple-saas
-      - Jwt__Audience=simple-saas-users
+      - ConnectionStrings__DefaultConnection=${DB_CONNECTION}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
     ports:
       - "8080:8080"
 
